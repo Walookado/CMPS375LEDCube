@@ -1,12 +1,21 @@
+//Title: LED Cube 2x2x2
+//Authors: Team Haytom: Zachary Smith, Ericka Henderson, Kaylea Stewart
 
-//intializing and declaring layers
+
+//intializing and declaring layers by pin number
 int layer[2]={A2,A3};
-//initializing and declaring leds, bottom right is led[0]
+
+//initializing and declaring LEDs by pin number
 int led[4]={0,1,4,5};
+	
+// LED active on (HIGH, 1), layer active on (LOW, 0)	
+	
 int time = 100;
 
-void setup() {
-	// put your setup code here, to run once:
+
+//Pin setup for OUTPUT
+void setup() 
+{
 	for(int i = 0; i<4; i++)
 	{
 		pinMode(led[i], OUTPUT);
@@ -18,7 +27,9 @@ void setup() {
 	}
 }
 
-void loop() {
+//Main loop for the arduino to run through while active
+void loop() 
+{
     blink();
     delay(500);
     turnColumnsOff();
@@ -26,31 +37,35 @@ void loop() {
     randomflick();
 }
 
+//Basic function to turn off all LEDs
 void turnOff()
 {
 	for(int i = 0; i<4; i++)
 	{
 		digitalWrite(led[i], 0);
 	}
+	
 	for(int i = 0; i<2; i++)
 	{
 		digitalWrite(layer[i], 1);
 	}
 }
 
+//Basic function to turn on all LEDs
 void turnOn()
 {
 	for(int i = 0; i<4; i++)
 	{
 		digitalWrite(led[i], 1);
 	}
-	//turning on layers
+	
 	for(int i = 0; i<2; i++)
 	{
 		digitalWrite(layer[i], 0);
 	}
 }
 
+//Simple pattern that turns off columns of LEDs in sequence
 void turnColumnsOff()
 {
     int runs = 0;
@@ -58,7 +73,13 @@ void turnColumnsOff()
     {
         turnOn();
         
-        for(int i = 0; i<4; i++)
+        for(int i = 0; i<2; i++)
+        {
+            delay(500);
+            digitalWrite(led[i], 0);
+        }
+		
+		for(int i = 3; i>1; i--)
         {
             delay(500);
             digitalWrite(led[i], 0);
@@ -68,6 +89,7 @@ void turnColumnsOff()
     }
 }
 
+//Simple pattern that turns all LEDs on and off
 void blink()
 {
     int pin;
@@ -76,7 +98,6 @@ void blink()
     int layerVal = 1;
     int runs = 0;
     
-    // LED active on (HIGH, 1), layer active on (LOW, 0)
     while(looping)
     {
         for(pin = 0; pin < 4; pin++)
@@ -114,6 +135,7 @@ void blink()
 
 }
 
+//Pattern that turns random LEDs on and off
 void randomflick()
 {
   for(int i = 0; i < 20; i++)
@@ -132,5 +154,3 @@ void randomflick()
       delay(200); 
   }
 }
-
-
