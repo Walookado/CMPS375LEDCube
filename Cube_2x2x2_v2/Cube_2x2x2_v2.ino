@@ -22,17 +22,10 @@ void loop() {
 	//Currently set to blink on and off every second.
 	//turnOn();
 	blink();
-  turnOff();
-  delay(100);
-  turnOn();
-  turnColumnsOff();
-  turnOn();
-  delay(500);
-  blink();
-  turnColumnsOff();
-  randomflick();
-  turnOff();
-	
+	delay(500);
+	turnColumnsOff();
+	delay(500);
+	randomflick();
 }
 
 void turnOff()
@@ -61,61 +54,70 @@ void turnOn()
 }
 void turnColumnsOff()
 {
-  for(int i = 0; i<4; i++)
-  {
-    digitalWrite(led[i], 1);
-    delay(500);
-  }
-  
+	for(int i = 0; i<4; i++)
+	{
+		digitalWrite(led[i], 1);
+		delay(500);
+	}
+	
 }
 void blink()
 {
-    int pin;
-    bool looping = true;
-    int ledVal = 0;
-    int layerVal = 1;
-    
-    // LED active on (HIGH, 1), layer active on (LOW, 0)
-    while(looping)
-    {
-        for(pin = 0; pin < 4; pin++)
-        {
-            digitalWrite(led[pin], ledVal);
+	int pin;
+	bool looping = true;
+	int ledVal = 0;
+	int layerVal = 1;
+	int runs = 0;
+	
+	// LED active on (HIGH, 1), layer active on (LOW, 0)
+	while(looping)
+	{
+		for(pin = 0; pin < 4; pin++)
+		{
+			digitalWrite(led[pin], ledVal);
 		}
-        
-        for(pin = 0; pin < 2; pin++)
-        {
-            digitalWrite(layer[pin], layerVal);
+		
+		for(pin = 0; pin < 2; pin++)
+		{
+			digitalWrite(layer[pin], layerVal);
 		}
-        if(ledVal == 0)
-        {
-            ledVal = 1;
-            layerVal = 0;
+		if(ledVal == 0)
+		{
+			ledVal = 1;
+			layerVal = 0;
 		}
-        
-        else if(ledVal == 1){
-            ledVal = 0;
-            layerVal = 1;
+		
+		else if(ledVal == 1){
+			ledVal = 0;
+			layerVal = 1;
 		}
-        delay(1000);
+		delay(1000);
+		if(runs >= 10)
+		{
+			break;
+		}
+		else
+		{
+			runs++;
+		}
 	}
-
+	
 }
+
 void randomflick()
 {
-  turnOff();
-  for(int i = 0; i !=750; i+=1)
-  {
-  int rLayer = random(0,2);
-  int rLed = random(0,4);
-  
-  digitalWrite(layer[rLayer], 1);
-  digitalWrite(led[rLed], 0);
-  delay(300);
-  digitalWrite(layer[rLayer], 0);
-  digitalWrite(led[rLed], 1);
-  delay(300); 
-  }
+	for(int i = 0; i < 10; i++)
+	{
+		int rLayer = random(0,2);
+		int rLed = random(0,4);
+		
+		digitalWrite(layer[rLayer], 1);
+		digitalWrite(led[rLed], 0);
+		delay(300);
+		digitalWrite(layer[rLayer], 0);
+		digitalWrite(led[rLed], 1);
+		delay(300); 
+	}
 }
 
 
