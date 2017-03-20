@@ -8,6 +8,8 @@
 // LED Pattern Table in PROGMEM - last column is display time in 100ms units
 // TODO this could be a lot more compact but not with binary pattern representation
 const char PROGMEM PatternTable[] = {
+   //------done by kaylea
+  B0000,B0000,B0000,B0000, B0000,B0000,B0000,B0000, B0000,B0000,B0000,B0000, B0000,B0000,B0000,B0000, 100,
   // circle full layer at bottom
   B0000,B0000,B0100,B0000, B0000,B0000,B0000,B0000, B0000,B0000,B0000,B0000, B0000,B0000,B0000,B0000, 20,
   B0000,B0000,B0110,B0000, B0000,B0000,B0000,B0000, B0000,B0000,B0000,B0000, B0000,B0000,B0000,B0000, 20,
