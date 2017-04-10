@@ -15,3 +15,7 @@ Simulation Text Format Warning:
 		- Basically just highlight all the empty white space and the first symbol of a line and
 		- replace it with just that symbol
 		- and there will be no more bad white space.
+		
+Controls:
+	- W, S to move the cube closer or further
+	- Arrow keys to rotate the cube
