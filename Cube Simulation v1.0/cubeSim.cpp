@@ -48,10 +48,13 @@ GLuint	listLED;		//Draw Lists
 GLuint	screen = 1;
 GLuint	numLED = 64;
 
+GLboolean running = true;
+GLboolean resetFlag = false;
+
 int winw = 1280;
 int winh = 720;
 int xOffset = winw * 0.875;
-int yOffset = winh - 40;
+int yOffset = winh * 0.77;
 int GlobalRef = 0;
 int layer = 0;
 int window;
@@ -114,6 +117,7 @@ struct Button
 	std::string label;						/* the text label of the button */
 	ButtonCallback callbackFunction;	/* A pointer to a function to call if the button is pressed */
 
+	bool on;								/* Status of the current LED */
 	int id;								/* A unique ID to represent this Button */
 
 	struct Button* next;				/* a pointer to the next node in the linked list */
@@ -158,7 +162,16 @@ void storePattern()
 
 void setPattern()
 {
-	std::string currPattern = theCube.patternStorage[theCube.patternIndex];
+	std::string currPattern;
+	if (theCube.patternStorage[theCube.patternIndex] == "")
+	{
+		return;
+	}
+	else
+	{
+		currPattern = theCube.patternStorage[theCube.patternIndex];
+
+	}
 	std::istringstream iss(currPattern);
 	bool looping = true;
 	int layer = 0;
@@ -237,6 +250,66 @@ void initCube()
 
 }
 
+void convertPattern()
+{
+	std::string pattern = "";
+	if (theCube.patternStorage[0] == "")
+	{
+		theCube.patternStorage.clear();
+	}
+	for (int i = 0; i < 16; ++i)
+	{
+		pattern.append("B");
+		pattern.append(std::to_string(theCube.pattern[i][0].on));
+		pattern.append(std::to_string(theCube.pattern[i][1].on));
+		pattern.append(std::to_string(theCube.pattern[i][2].on));
+		pattern.append(std::to_string(theCube.pattern[i][3].on));
+		pattern.append(", ");
+	}
+
+	pattern.append(std::to_string(theCube.patternTime));
+	pattern.append(",");
+	theCube.patternStorage.push_back(pattern);
+}
+
+void writePatterns()
+{
+	std::ofstream outFile;
+	if (resetFlag)
+	{
+		outFile.open("pattern.txt", std::ofstream::out | std::ofstream::trunc);
+		if (outFile.is_open())
+		{
+			for (std::vector<std::string>::iterator it = theCube.patternStorage.begin(); it != theCube.patternStorage.end(); ++it)
+			{
+				outFile << *it << "\n";
+			}
+			outFile.close();
+		}
+		else
+		{
+			printf("Unable to open file\n");
+		}
+		resetFlag = false;
+	}
+	else
+	{
+		outFile.open("pattern.txt", std::ofstream::out | std::ios_base::app);
+		if (outFile.is_open())
+		{
+			for (std::vector<std::string>::iterator it = theCube.patternStorage.begin(); it != theCube.patternStorage.end(); ++it)
+			{
+				outFile << *it << "\n";
+			}
+			outFile.close();
+		}
+		else
+		{
+			printf("Unable to open file\n");
+		}
+	}
+}
+
 GLint initLEDList(GLuint list, GLUquadric *quad)		//Initialize draw lists for the cube
 {
 	for (GLint i = 0; i < numLED; ++i)
@@ -293,6 +366,7 @@ int CreateButton(std::string label, ButtonCallback cb, int x, int y, int w, int 
 	p->h = h;
 	p->callbackFunction = cb;
 	p->label = label;
+	p->on = false;
 
 	p->next = pButtonList;
 	pButtonList = p;
@@ -347,16 +421,58 @@ int DeleteButtonById(int id)
 */
 static void TheButtonCallback(int num)
 {
+	Button* b = pButtonList;
+	while (b)
+	{
+		if (b->id == num)
+		{
+			b->on = !b->on;
+
+			if (b->on)
+			{
+				theCube.pattern[num - 1][layer].on = 1;
+			}
+			else
+			{
+				theCube.pattern[num - 1][layer].on = 0;
+			}
+			glutPostRedisplay();
+		}
+		b = b->next;
+	}
+
+
 	printf("I have been called %d\n", num);
 }
 
 static void ResetCallback(int num)
 {
+	theCube.patternStorage.clear();
+	theCube.patternStorage.push_back("");
+	for (int i = 0; i < 16; ++i)
+	{
+		theCube.pattern[i][0].on = 0;
+		theCube.pattern[i][1].on = 0;
+		theCube.pattern[i][2].on = 0;
+		theCube.pattern[i][3].on = 0;
+	}
+	theCube.patternIndex = 0;
+	theCube.patternTime = 10;
+	running = false;
+	resetFlag = true;
 	printf("I have been called %d\n", num);
 }
 
 static void SaveCallback(int num)
 {
+	convertPattern();
+	writePatterns();
+	printf("I have been called %d\n", num);
+}
+
+static void RunCallback(int num)
+{
+	running = !running;
 	printf("I have been called %d\n", num);
 }
 
@@ -386,6 +502,32 @@ static void LayerDownCallback(int num)
 		layer--;
 	}
 	printf("Layer is now %d\n", layer);
+}
+
+static void TimeUpCallback(int num)
+{
+	printf("I have been called %d and layer is %d\n", num, theCube.patternTime);
+	theCube.patternTime += 2;
+	printf("Layer is now %d\n", theCube.patternTime);
+}
+
+static void TimeDownCallback(int num)
+{
+	printf("I have been called %d and layer is %d\n", num, theCube.patternTime);
+	if (theCube.patternTime == 0 || theCube.patternTime < 2)
+	{
+		return;
+	}
+	else
+	{
+		theCube.patternTime -= 2;
+	}
+	printf("Layer is now %d\n", theCube.patternTime);
+}
+
+static void BlankCallback(int num)
+{
+	printf("I have been called %d, but I do nothing\n", num);
 }
 
 /*----------------------------------------------------------------------------------------
@@ -545,7 +687,10 @@ void ButtonPassive(int x, int y)
 		{
 			b->label = std::to_string(layer);
 		}
-
+		if (b->id == 24)
+		{
+			b->label = std::to_string(theCube.patternTime);
+		}
 		b = b->next;
 	}
 	if (needRedraw) {
@@ -649,8 +794,6 @@ void ButtonDraw()
 	}
 }
 
-
-
 void InitButtons()
 {
 	for (int i = 0; i < 16; ++i)
@@ -658,20 +801,24 @@ void InitButtons()
 		if (i % 4 == 0 && i != 0)
 		{
 			xOffset = winw * 0.875;
-			yOffset -= 40;
+			yOffset += 40;
 		}
 		CreateButton(std::to_string(i), TheButtonCallback, xOffset, yOffset, 30, 30);
 		xOffset += 40;
 	}
 
 	xOffset = winw * 0.875;
-	yOffset = winh - 40;
+	yOffset = winh * 0.94;
 
 	CreateButton("UP", LayerUpCallback, xOffset - 50, yOffset - 90, 40, 25);
-	CreateButton(std::to_string(layer), TheButtonCallback, xOffset - 50, yOffset - 60, 40, 25);
+	CreateButton(std::to_string(layer), BlankCallback, xOffset - 50, yOffset - 60, 40, 25);
 	CreateButton("DOWN", LayerDownCallback, xOffset - 50, yOffset - 30, 40, 25);
-	CreateButton("Save", SaveCallback, (winw * 0.5) - 50, winh * 0.95, 50, 25);
-	CreateButton("Reset", ResetCallback, (winw * 0.5) + 25, winh * 0.95, 50, 25);
+	CreateButton("Save", SaveCallback, (winw * 0.5) - 80, winh * 0.95, 50, 25);
+	CreateButton("Reset", ResetCallback, (winw * 0.5) + 30, winh * 0.95, 50, 25);
+	CreateButton("Run/Stop", RunCallback, (winw * 0.5) - 25, winh * 0.95, 50, 25);
+	CreateButton("+", TimeUpCallback, xOffset + 15, (winh * 0.77) - 35, 35, 25);
+	CreateButton(std::to_string(theCube.patternTime), BlankCallback, xOffset + 55, (winh * 0.77) - 35, 40, 25);
+	CreateButton("-", TimeDownCallback, xOffset + 100, (winh * 0.77) - 35, 35, 25);
 }
 
 int InitGL(GLvoid)										// All Setup For OpenGL Goes Here
@@ -874,7 +1021,7 @@ GLvoid DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
 	*/
 	glutSwapBuffers();
 
-	if (getCurrentTime() >= swapPatternTime)
+	if (running && getCurrentTime() >= swapPatternTime)
 	{
 		setPattern();
 	}
@@ -1005,6 +1152,6 @@ int main(int argc, char **argv)
 	glutPassiveMotionFunc(&MousePassiveMotion);
 
 	InitGL();
-	
+
 	glutMainLoop();
 }
