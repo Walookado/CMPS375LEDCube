@@ -195,6 +195,26 @@ void setPattern()
 	swapPatternTime = getCurrentTime() + (theCube.patternTime * 20);
 	theCube.patternIndex++;
 
+	/* Set Button state to match LED on state for current layer */
+	Button* b = pButtonList;
+	while (b)
+	{
+		if (theCube.pattern[b->id - 1][layer].on == 0)
+		{
+			b->on = false;
+		}
+		else
+		{
+			b->on = true;
+		}
+
+		b = b->next;
+		if (b->id >= 17)
+		{
+			break;
+		}
+	}
+
 	//Reset pattern to first after reaching final pattern
 	if (theCube.patternIndex >= theCube.patternStorage.size())
 	{
@@ -312,7 +332,7 @@ void writePatterns()
 
 GLint initLEDList(GLuint list, GLUquadric *quad)		//Initialize draw lists for the cube
 {
-	for (GLint i = 0; i < numLED; ++i)
+	for (GLuint i = 0; i < numLED; ++i)
 	{
 		gluQuadricDrawStyle(quad, GLU_FILL);
 		gluQuadricNormals(quad, GLU_SMOOTH);
@@ -322,34 +342,6 @@ GLint initLEDList(GLuint list, GLUquadric *quad)		//Initialize draw lists for th
 		glEndList();
 	}
 	return list;
-}
-
-void drawCube()
-{
-	for (int i = 0; i < 16; ++i)
-	{
-		for (int j = 0; j < 4; ++j)
-		{
-			if (theCube.pattern[i][j].on)
-			{
-				glPushMatrix();
-				glColor4f(0.2f, 0.2f, 0.75f, 1.0f);
-				glTranslatef(theCube.pattern[i][j].x, theCube.pattern[i][j].y, theCube.pattern[i][j].z);
-				glScalef(0.25f, 0.25f, 0.25f);
-				glCallList(listLED);
-				glPopMatrix();
-			}
-			else
-			{
-				glPushMatrix();
-				glColor4f(0.75f, 0.75f, 0.75f, 0.02f);
-				glTranslatef(theCube.pattern[i][j].x, theCube.pattern[i][j].y, theCube.pattern[i][j].z);
-				glScalef(0.25f, 0.25f, 0.25f);
-				glCallList(listLED);
-				glPopMatrix();
-			}
-		}
-	}
 }
 
 /*
@@ -427,8 +419,7 @@ static void TheButtonCallback(int num)
 		if (b->id == num)
 		{
 			b->on = !b->on;
-
-			if (b->on)
+			if (b->on == 1)
 			{
 				theCube.pattern[num - 1][layer].on = 1;
 			}
@@ -436,17 +427,16 @@ static void TheButtonCallback(int num)
 			{
 				theCube.pattern[num - 1][layer].on = 0;
 			}
+			printf("Button id  %d and my LED is %d and my button is set to %d\n", num, theCube.pattern[num - 1][layer].on, b->on);
 			glutPostRedisplay();
 		}
 		b = b->next;
 	}
-
-
-	printf("I have been called %d\n", num);
 }
 
 static void ResetCallback(int num)
 {
+	/* Reset the pattern vector and array along with the cube */
 	theCube.patternStorage.clear();
 	theCube.patternStorage.push_back("");
 	for (int i = 0; i < 16; ++i)
@@ -458,27 +448,38 @@ static void ResetCallback(int num)
 	}
 	theCube.patternIndex = 0;
 	theCube.patternTime = 10;
+
+	/* Reset Buttons */
+	Button* b = pButtonList;
+	while (b)
+	{
+		if (b->id < 17)
+		{
+			b->on = false;
+		}
+		b = b->next;
+	}
 	running = false;
 	resetFlag = true;
-	printf("I have been called %d\n", num);
+	printf("Button id  %d\n", num);
 }
 
 static void SaveCallback(int num)
 {
 	convertPattern();
 	writePatterns();
-	printf("I have been called %d\n", num);
+	printf("Button id  %d\n", num);
 }
 
 static void RunCallback(int num)
 {
 	running = !running;
-	printf("I have been called %d\n", num);
+	printf("Button id  %d\n", num);
 }
 
 static void LayerUpCallback(int num)
 {
-	printf("I have been called %d and layer is %d\n", num, layer);
+	printf("Button id  %d and layer is %d\n", num, layer);
 	if (layer == 3)
 	{
 		layer = 0;
@@ -488,11 +489,29 @@ static void LayerUpCallback(int num)
 		layer++;
 	}
 	printf("Layer is now %d\n", layer);
+
+	/* Set Button state to match LED on state for current layer */
+	Button* b = pButtonList;
+	while (b)
+	{
+		if (b->id < 17)
+		{
+			if (theCube.pattern[b->id - 1][layer].on == 0)
+			{
+				b->on = false;
+			}
+			else
+			{
+				b->on = true;
+			}
+		}
+		b = b->next;
+	}
 }
 
 static void LayerDownCallback(int num)
 {
-	printf("I have been called %d and layer is %d\n", num, layer);
+	printf("Button id  %d and layer is %d\n", num, layer);
 	if (layer == 0)
 	{
 		layer = 3;
@@ -502,18 +521,36 @@ static void LayerDownCallback(int num)
 		layer--;
 	}
 	printf("Layer is now %d\n", layer);
+
+	/* Set Button state to match LED on state for current layer */
+	Button* b = pButtonList;
+	while (b)
+	{
+		if (b->id < 17)
+		{
+			if (theCube.pattern[b->id - 1][layer].on == 0)
+			{
+				b->on = false;
+			}
+			else
+			{
+				b->on = true;
+			}
+		}
+		b = b->next;
+	}
 }
 
 static void TimeUpCallback(int num)
 {
-	printf("I have been called %d and layer is %d\n", num, theCube.patternTime);
+	printf("Button id  %d and Time is %d\n", num, theCube.patternTime);
 	theCube.patternTime += 2;
-	printf("Layer is now %d\n", theCube.patternTime);
+	printf("Time is now %d\n", theCube.patternTime);
 }
 
 static void TimeDownCallback(int num)
 {
-	printf("I have been called %d and layer is %d\n", num, theCube.patternTime);
+	printf("Button id  %d and time is %d\n", num, theCube.patternTime);
 	if (theCube.patternTime == 0 || theCube.patternTime < 2)
 	{
 		return;
@@ -522,12 +559,12 @@ static void TimeDownCallback(int num)
 	{
 		theCube.patternTime -= 2;
 	}
-	printf("Layer is now %d\n", theCube.patternTime);
+	printf("Time is now %d\n", theCube.patternTime);
 }
 
 static void BlankCallback(int num)
 {
-	printf("I have been called %d, but I do nothing\n", num);
+	printf("Button id  %d, but I do nothing\n", num);
 }
 
 /*----------------------------------------------------------------------------------------
@@ -713,10 +750,23 @@ void ButtonDraw()
 		*	We will indicate that the mouse cursor is over the button by changing its
 		*	colour.
 		*/
-		if (b->highlighted)
+		if (b->highlighted && !b->on)
+		{
 			glColor3f(0.7f, 0.7f, 0.8f);
+		}
+		else if (b->highlighted && b->on)
+		{
+			glColor3f(0.05f, 0.05f, 0.2f);
+		}
+		else if (!b->highlighted && b->on)
+		{
+			glColor3f(0.2f, 0.2f, 0.5f);
+		}
 		else
+		{
 			glColor3f(0.6f, 0.6f, 0.6f);
+		}
+
 
 		/*
 		*	draw background for the button.
@@ -737,9 +787,13 @@ void ButtonDraw()
 		*	The colours for the outline are reversed when the button.
 		*/
 		if (b->state)
+		{
 			glColor3f(0.4f, 0.4f, 0.4f);
+		}
 		else
+		{
 			glColor3f(0.8f, 0.8f, 0.8f);
+		}
 
 		glBegin(GL_LINE_STRIP);
 		glVertex2i(b->x + b->w, b->y);
@@ -748,9 +802,13 @@ void ButtonDraw()
 		glEnd();
 
 		if (b->state)
+		{
 			glColor3f(0.8f, 0.8f, 0.8f);
+		}
 		else
+		{
 			glColor3f(0.4f, 0.4f, 0.4f);
+		}
 
 		glBegin(GL_LINE_STRIP);
 		glVertex2i(b->x, b->y + b->h);
@@ -771,7 +829,8 @@ void ButtonDraw()
 		*	if the button is pressed, make it look as though the string has been pushed
 		*	down. It's just a visual thing to help with the overall look....
 		*/
-		if (b->state) {
+		if (b->state)
+		{
 			fontx += 2;
 			fonty += 2;
 		}
@@ -791,6 +850,34 @@ void ButtonDraw()
 		Font(GLUT_BITMAP_HELVETICA_10, b->label, fontx, fonty);
 
 		b = b->next;
+	}
+}
+
+void drawCube()
+{
+	for (int i = 0; i < 16; ++i)
+	{
+		for (int j = 0; j < 4; ++j)
+		{
+			if (theCube.pattern[i][j].on)
+			{
+				glPushMatrix();
+				glColor4f(0.2f, 0.2f, 0.75f, 1.0f);
+				glTranslatef(theCube.pattern[i][j].x, theCube.pattern[i][j].y, theCube.pattern[i][j].z);
+				glScalef(0.25f, 0.25f, 0.25f);
+				glCallList(listLED);
+				glPopMatrix();
+			}
+			else
+			{
+				glPushMatrix();
+				glColor4f(0.75f, 0.75f, 0.75f, 0.02f);
+				glTranslatef(theCube.pattern[i][j].x, theCube.pattern[i][j].y, theCube.pattern[i][j].z);
+				glScalef(0.25f, 0.25f, 0.25f);
+				glCallList(listLED);
+				glPopMatrix();
+			}
+		}
 	}
 }
 
