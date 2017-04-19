@@ -1,11 +1,17 @@
 /*
 *		This code was based upon the OpenGL program framework from
 *		Jeff Molofee's tutorials on his website nehe.gamedev.net
+*		as well as Rob Bateman's basic OpenGL UI tutorials.
 */
 
 #define _USE_MATH_DEFINES
+#define ESCAPE 27
+#define UP_ARROW 72
+#define DOWN_ARROW 80
+#define LEFT_ARROW 75
+#define RIGHT_ARROW 77
+
 #include <cmath>
-#include <windows.h>		// Header File For Windows
 #include <stdio.h>			// Header File For Standard Input/Output
 #include <stdlib.h>
 #include <fstream>
@@ -19,22 +25,7 @@
 #include <gl\gl.h>			// Header File For The OpenGL32 Library
 #include <gl\glu.h>			// Header File For The GLu32 Library
 #include "SOIL.h"
-
-HDC			hDC = NULL;		// Private GDI Device Context
-HGLRC		hRC = NULL;		// Permanent Rendering Context
-HWND		hWnd = NULL;		// Holds Our Window Handle
-HINSTANCE	hInstance;		// Holds The Instance Of The Application
-
-bool	keys[256];			// Array Used For The Keyboard Routine
-bool	active = TRUE;		// Window Active Flag Set To TRUE By Default
-bool	fullscreen = TRUE;	// Fullscreen Flag Set To Fullscreen Mode By Default
-bool	light;				// Lighting ON/OFF ( NEW )
-bool	lp = true;			// L Pressed? ( NEW )
-bool	fp;					// F Pressed? ( NEW )
-bool	movement = TRUE;
-bool	eSwitch = FALSE;
-bool	shot = FALSE;
-bool	gameover = FALSE;
+#include <assert.h>
 
 const float piover180 = 0.0174532925f;
 const float pi = 3.1415926536f;
@@ -53,15 +44,38 @@ GLfloat zpos = 0.0f;									//Camera z position
 
 clock_t swapPatternTime;
 
-GLuint	filter;						// Which Filter To Use
 GLuint	listLED;		//Draw Lists
-GLuint	seed = time(0);
 GLuint	screen = 1;
+GLuint	numLED = 64;
 
-GLint	numLED = 64;
+int winw = 1280;
+int winh = 720;
+int xOffset = winw * 0.875;
+int yOffset = winh - 40;
+int GlobalRef = 0;
+int layer = 0;
+int window;
 
 
-LRESULT	CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);	// Declaration For WndProc
+
+/*
+*	A structure to represent the mouse information
+*/
+struct Mouse
+{
+	int x;		/*	the x coordinate of the mouse cursor	*/
+	int y;		/*	the y coordinate of the mouse cursor	*/
+	int lmb;	/*	is the left button pressed?		*/
+	int mmb;	/*	is the middle button pressed?	*/
+	int rmb;	/*	is the right button pressed?	*/
+
+	int xpress; /*	stores the x-coord of when the first button press occurred	*/
+	int ypress; /*	stores the y-coord of when the first button press occurred	*/
+};
+
+typedef struct Mouse Mouse;
+
+Mouse TheMouse = { 0, 0, 0, 0, 0 };
 
 struct LED
 {
@@ -76,6 +90,40 @@ struct LEDCUBE
 	GLuint patternIndex;
 	clock_t patternTime;
 };
+
+/*
+*	We will define a function pointer type. ButtonCallback is a pointer to a function that
+*	looks a bit like this :
+*
+*	void func() {
+*	}
+*/
+typedef void(*ButtonCallback)(int num);
+
+/*
+*	This is a simple structure that holds a button.
+*/
+struct Button
+{
+	int   x;							/* top left x coord of the button */
+	int   y;							/* top left y coord of the button */
+	int   w;							/* the width of the button */
+	int   h;							/* the height of the button */
+	int	  state;						/* the state, 1 if pressed, 0 otherwise */
+	int	  highlighted;					/* is the mouse cursor over the control? */
+	std::string label;						/* the text label of the button */
+	ButtonCallback callbackFunction;	/* A pointer to a function to call if the button is pressed */
+
+	int id;								/* A unique ID to represent this Button */
+
+	struct Button* next;				/* a pointer to the next node in the linked list */
+};
+typedef struct Button Button;
+
+/*
+*	The start of a linked list of buttons
+*/
+Button* pButtonList = NULL;
 
 LEDCUBE theCube;
 
@@ -140,8 +188,6 @@ void setPattern()
 		theCube.patternIndex = 0;
 	}
 }
-
-
 
 void initCube()
 {
@@ -233,33 +279,403 @@ void drawCube()
 	}
 }
 
-GLvoid ReSizeGLScene(GLsizei width, GLsizei height)		// Resize And Initialize The GL Window
+/*
+*
+*/
+int CreateButton(std::string label, ButtonCallback cb, int x, int y, int w, int h)
 {
-	if (height == 0)										// Prevent A Divide By Zero By
+	Button* p = (Button*)malloc(sizeof(Button));
+	assert(p);
+	memset(p, 0, sizeof(Button));
+	p->x = x;
+	p->y = y;
+	p->w = w;
+	p->h = h;
+	p->callbackFunction = cb;
+	p->label = label;
+
+	p->next = pButtonList;
+	pButtonList = p;
+
+	return p->id = ++GlobalRef;
+}
+
+int DeleteButtonByName(std::string label)
+{
+	Button* previous = NULL, *curr = pButtonList;
+	while (curr != NULL) {
+		if (label.compare(curr->label) == 0) {
+			if (previous)
+				previous->next = curr->next;
+			else
+				pButtonList = curr->next;
+			free(curr);
+			return 1;
+		}
+		previous = curr;
+		curr = curr->next;
+	}
+	return 0;
+}
+
+int DeleteButtonById(int id)
+{
+	Button	*previous = NULL,
+		*curr = pButtonList;
+
+	while (curr != NULL)
 	{
-		height = 1;										// Making Height Equal One
+		if (id == curr->id)
+		{
+			if (previous)
+				previous->next = curr->next;
+			else
+				pButtonList = curr->next;
+			free(curr);
+			return 1;
+		}
+		previous = curr;
+		curr = curr->next;
+	}
+	return 0;
+}
+
+/*----------------------------------------------------------------------------------------
+*	This is an example callback function. Notice that it's type is the same
+*	an the ButtonCallback type. We can assign a pointer to this function which
+*	we can store and later call.
+*/
+static void TheButtonCallback(int num)
+{
+	printf("I have been called %d\n", num);
+}
+
+static void ResetCallback(int num)
+{
+	printf("I have been called %d\n", num);
+}
+
+static void SaveCallback(int num)
+{
+	printf("I have been called %d\n", num);
+}
+
+static void LayerUpCallback(int num)
+{
+	printf("I have been called %d and layer is %d\n", num, layer);
+	if (layer == 3)
+	{
+		layer = 0;
+	}
+	else
+	{
+		layer++;
+	}
+	printf("Layer is now %d\n", layer);
+}
+
+static void LayerDownCallback(int num)
+{
+	printf("I have been called %d and layer is %d\n", num, layer);
+	if (layer == 0)
+	{
+		layer = 3;
+	}
+	else
+	{
+		layer--;
+	}
+	printf("Layer is now %d\n", layer);
+}
+
+/*----------------------------------------------------------------------------------------
+*	\brief	This function draws a text string to the screen using glut bitmap fonts.
+*	\param	font	-	the font to use. it can be one of the following :
+*
+*					GLUT_BITMAP_9_BY_15
+*					GLUT_BITMAP_8_BY_13
+*					GLUT_BITMAP_TIMES_ROMAN_10
+*					GLUT_BITMAP_TIMES_ROMAN_24
+*					GLUT_BITMAP_HELVETICA_10
+*					GLUT_BITMAP_HELVETICA_12
+*					GLUT_BITMAP_HELVETICA_18
+*
+*	\param	text	-	the text string to output
+*	\param	x		-	the x co-ordinate
+*	\param	y		-	the y co-ordinate
+*/
+void Font(void *font, std::string text, int x, int y)
+{
+	glRasterPos2i(x, y);
+
+	for (std::string::iterator it = text.begin(); it != text.end(); ++it)
+	{
+		glutBitmapCharacter(font, *it);
+	}
+}
+
+
+/*----------------------------------------------------------------------------------------
+*	\brief	This function is used to see if a mouse click or event is within a button
+*			client area.
+*	\param	b	-	a pointer to the button to test
+*	\param	x	-	the x coord to test
+*	\param	y	-	the y-coord to test
+*/
+int ButtonClickTest(Button* b, int x, int y)
+{
+	if (b)
+	{
+		/*
+		*	If clicked within button area, then return true
+		*/
+		if (x > b->x      &&
+			x < b->x + b->w &&
+			y > b->y      &&
+			y < b->y + b->h) {
+			return 1;
+		}
 	}
 
-	glViewport(0, 0, width, height);						// Reset The Current Viewport
+	/*
+	*	otherwise false.
+	*/
+	return 0;
+}
 
-	glMatrixMode(GL_PROJECTION);						// Select The Projection Matrix
-	glLoadIdentity();									// Reset The Projection Matrix
+/*----------------------------------------------------------------------------------------
+*	\brief	This function draws the specified button.
+*	\param	b	-	a pointer to the button to check.
+*	\param	x	-	the x location of the mouse cursor.
+*	\param	y	-	the y location of the mouse cursor.
+*/
+void ButtonRelease(int x, int y)
+{
+	Button* b = pButtonList;
+	while (b)
+	{
+		/*
+		*	If the mouse button was pressed within the button area
+		*	as well as being released on the button.....
+		*/
+		if (ButtonClickTest(b, TheMouse.xpress, TheMouse.ypress) &&
+			ButtonClickTest(b, x, y))
+		{
+			/*
+			*	Then if a callback function has been set, call it.
+			*/
 
-	// Calculate The Aspect Ratio Of The Window
-	gluPerspective(45.0f, (GLfloat)width / (GLfloat)height, 0.1f, 100.0f);
+			if (b->callbackFunction)
+			{
+				b->callbackFunction(b->id);
+			}
+		}
 
-	glMatrixMode(GL_MODELVIEW);							// Select The Modelview Matrix
-	glLoadIdentity();									// Reset The Modelview Matrix
+		/*
+		*	Set state back to zero.
+		*/
+		b->state = 0;
+
+		b = b->next;
+	}
+}
+
+/*----------------------------------------------------------------------------------------
+*	\brief	This function draws the specified button.
+*	\param	b	-	a pointer to the button to check.
+*	\param	x	-	the x location of the mouse cursor.
+*	\param	y	-	the y location of the mouse cursor.
+*/
+void ButtonPress(int x, int y)
+{
+	Button* b = pButtonList;
+	while (b)
+	{
+		/*
+		*	if the mouse click was within the buttons client area,
+		*	set the state to true.
+		*/
+		if (ButtonClickTest(b, x, y))
+		{
+			b->state = 1;
+		}
+		b = b->next;
+	}
+}
+
+
+/*----------------------------------------------------------------------------------------
+*	\brief	This function draws the specified button.
+*	\param	b	-	a pointer to the button to check.
+*	\param	x	-	the x location of the mouse cursor.
+*	\param	y	-	the y location of the mouse cursor.
+*/
+void ButtonPassive(int x, int y)
+{
+	int needRedraw = 0;
+	Button* b = pButtonList;
+	while (b)
+	{
+		/*
+		*	if the mouse moved over the control
+		*/
+		if (ButtonClickTest(b, x, y))
+		{
+			/*
+			*	If the cursor has just arrived over the control, set the highlighted flag
+			*	and force a redraw. The screen will not be redrawn again until the mouse
+			*	is no longer over this control
+			*/
+			if (b->highlighted == 0) {
+				b->highlighted = 1;
+				needRedraw = 1;
+			}
+		}
+		/*
+		*	If the cursor is no longer over the control, then if the control
+		*	is highlighted (ie, the mouse has JUST moved off the control) then
+		*	we set the highlighting back to false, and force a redraw.
+		*/
+		else if (b->highlighted == 1)
+		{
+			b->highlighted = 0;
+			needRedraw = 1;
+		}
+		if (b->id == 18 && b->label != std::to_string(layer))
+		{
+			b->label = std::to_string(layer);
+		}
+
+		b = b->next;
+	}
+	if (needRedraw) {
+		glutPostRedisplay();
+	}
+}
+
+/*----------------------------------------------------------------------------------------
+*	\brief	This function draws the specified button.
+*/
+void ButtonDraw()
+{
+	int fontx;
+	int fonty;
+
+	Button* b = pButtonList;
+	while (b)
+	{
+		/*
+		*	We will indicate that the mouse cursor is over the button by changing its
+		*	colour.
+		*/
+		if (b->highlighted)
+			glColor3f(0.7f, 0.7f, 0.8f);
+		else
+			glColor3f(0.6f, 0.6f, 0.6f);
+
+		/*
+		*	draw background for the button.
+		*/
+		glBegin(GL_QUADS);
+		glVertex2i(b->x, b->y);
+		glVertex2i(b->x, b->y + b->h);
+		glVertex2i(b->x + b->w, b->y + b->h);
+		glVertex2i(b->x + b->w, b->y);
+		glEnd();
+
+		/*
+		*	Draw an outline around the button with width 3
+		*/
+		glLineWidth(1);
+
+		/*
+		*	The colours for the outline are reversed when the button.
+		*/
+		if (b->state)
+			glColor3f(0.4f, 0.4f, 0.4f);
+		else
+			glColor3f(0.8f, 0.8f, 0.8f);
+
+		glBegin(GL_LINE_STRIP);
+		glVertex2i(b->x + b->w, b->y);
+		glVertex2i(b->x, b->y);
+		glVertex2i(b->x, b->y + b->h);
+		glEnd();
+
+		if (b->state)
+			glColor3f(0.8f, 0.8f, 0.8f);
+		else
+			glColor3f(0.4f, 0.4f, 0.4f);
+
+		glBegin(GL_LINE_STRIP);
+		glVertex2i(b->x, b->y + b->h);
+		glVertex2i(b->x + b->w, b->y + b->h);
+		glVertex2i(b->x + b->w, b->y);
+		glEnd();
+
+		glLineWidth(1);
+
+
+		/*
+		*	Calculate the x and y coords for the text string in order to center it.
+		*/
+		fontx = b->x + (b->w - glutBitmapLength(GLUT_BITMAP_HELVETICA_10, (const unsigned char*)b->label.c_str())) / 2;
+		fonty = b->y + (b->h + 10) / 2;
+
+		/*
+		*	if the button is pressed, make it look as though the string has been pushed
+		*	down. It's just a visual thing to help with the overall look....
+		*/
+		if (b->state) {
+			fontx += 2;
+			fonty += 2;
+		}
+
+		/*
+		*	If the cursor is currently over the button we offset the text string and draw a shadow
+		*/
+		if (b->highlighted)
+		{
+			glColor3f(0, 0, 0);
+			Font(GLUT_BITMAP_HELVETICA_10, b->label, fontx, fonty);
+			fontx--;
+			fonty--;
+		}
+
+		glColor3f(1, 1, 1);
+		Font(GLUT_BITMAP_HELVETICA_10, b->label, fontx, fonty);
+
+		b = b->next;
+	}
+}
+
+
+
+void InitButtons()
+{
+	for (int i = 0; i < 16; ++i)
+	{
+		if (i % 4 == 0 && i != 0)
+		{
+			xOffset = winw * 0.875;
+			yOffset -= 40;
+		}
+		CreateButton(std::to_string(i), TheButtonCallback, xOffset, yOffset, 30, 30);
+		xOffset += 40;
+	}
+
+	xOffset = winw * 0.875;
+	yOffset = winh - 40;
+
+	CreateButton("UP", LayerUpCallback, xOffset - 50, yOffset - 90, 40, 25);
+	CreateButton(std::to_string(layer), TheButtonCallback, xOffset - 50, yOffset - 60, 40, 25);
+	CreateButton("DOWN", LayerDownCallback, xOffset - 50, yOffset - 30, 40, 25);
+	CreateButton("Save", SaveCallback, (winw * 0.5) - 50, winh * 0.95, 50, 25);
+	CreateButton("Reset", ResetCallback, (winw * 0.5) + 25, winh * 0.95, 50, 25);
 }
 
 int InitGL(GLvoid)										// All Setup For OpenGL Goes Here
 {
-	/*
-	if (!LoadGLTextures())								// Jump To Texture Loading Routine
-	{
-	return FALSE;									// If Texture Didn't Load Return FALSE
-	}
-	*/
 	glEnable(GL_TEXTURE_2D);							// Enable Texture Mapping
 	glShadeModel(GL_SMOOTH);							// Enable Smooth Shading
 	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);				// Black Background
@@ -274,473 +690,321 @@ int InitGL(GLvoid)										// All Setup For OpenGL Goes Here
 	glEnable(GL_LIGHT1);								// Enable Light One
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	//glEnable(GL_LIGHTING);
-
-	srand(seed);
+	glEnable(GL_LIGHTING);
 
 	initCube();
-
+	InitButtons();
 	listLED = glGenLists(numLED);
 	quad = gluNewQuadric();
 	listLED = initLEDList(listLED, quad);
 
-	return TRUE;										// Initialization Went OK
+	return true;										// Initialization Went OK
 }
 
-int DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
+/*----------------------------------------------------------------------------------------
+*	\brief	This function is called whenever a mouse button is pressed or released
+*	\param	button	-	GLUT_LEFT_BUTTON, GLUT_RIGHT_BUTTON, or GLUT_MIDDLE_BUTTON
+*	\param	state	-	GLUT_UP or GLUT_DOWN depending on whether the mouse was released
+*						or pressed respectivly.
+*	\param	x		-	the x-coord of the mouse cursor.
+*	\param	y		-	the y-coord of the mouse cursor.
+*/
+void MouseButton(int button, int state, int x, int y)
 {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	// Clear The Screen And The Depth Buffer
-	glLoadIdentity();									// Reset The View
+	/*
+	*	update the mouse position
+	*/
+	TheMouse.x = x;
+	TheMouse.y = y;
 
-	if (screen == 0)
+	/*
+	*	has the button been pressed or released?
+	*/
+	if (state == GLUT_DOWN)
 	{
-		//drawScreen(texture, 0);
-	}
-	if (screen == 1)
-	{
-		GLfloat xtrans = -xpos;
-		GLfloat ztrans = -zpos;
-		GLfloat ytrans = 4.0f;
-		GLfloat sceneroty = 360.0f - yrot;
+		/*
+		*	This holds the location of the first mouse click
+		*/
+		//if ( !(TheMouse.lmb || TheMouse.mmb || TheMouse.rmb) ) {
+		TheMouse.xpress = x;
+		TheMouse.ypress = y;
+		//}
 
-
-
-		glTranslatef(0.0f, 0.0f, -25.0f);
-		glTranslatef(0.0f, 0.0f, ztrans);
-
-
-
-		glPushMatrix();
-		glRotatef(sceneroty, 0, 1.0f, 0);
-		glRotatef(lookupdown, 1.0f, 0, 0);
-		drawCube();
-		glPopMatrix();
-	}
-
-	return TRUE;										// Keep Going
-}
-
-GLvoid KillGLWindow(GLvoid)								// Properly Kill The Window
-{
-	if (fullscreen)										// Are We In Fullscreen Mode?
-	{
-		ChangeDisplaySettings(NULL, 0);					// If So Switch Back To The Desktop
-		ShowCursor(TRUE);								// Show Mouse Pointer
-	}
-
-	if (hRC)											// Do We Have A Rendering Context?
-	{
-		if (!wglMakeCurrent(NULL, NULL))					// Are We Able To Release The DC And RC Contexts?
+		/*
+		*	Which button was pressed?
+		*/
+		switch (button)
 		{
-			MessageBox(NULL, "Release Of DC And RC Failed.", "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
+		case GLUT_LEFT_BUTTON:
+			TheMouse.lmb = 1;
+			ButtonPress(x, y);
+		case GLUT_MIDDLE_BUTTON:
+			TheMouse.mmb = 1;
+			break;
+		case GLUT_RIGHT_BUTTON:
+			TheMouse.rmb = 1;
+			break;
 		}
-
-		if (!wglDeleteContext(hRC))						// Are We Able To Delete The RC?
-		{
-			MessageBox(NULL, "Release Rendering Context Failed.", "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
-		}
-		hRC = NULL;										// Set RC To NULL
-	}
-
-	if (hDC && !ReleaseDC(hWnd, hDC))					// Are We Able To Release The DC
-	{
-		MessageBox(NULL, "Release Device Context Failed.", "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
-		hDC = NULL;										// Set DC To NULL
-	}
-
-	if (hWnd && !DestroyWindow(hWnd))					// Are We Able To Destroy The Window?
-	{
-		MessageBox(NULL, "Could Not Release hWnd.", "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
-		hWnd = NULL;										// Set hWnd To NULL
-	}
-
-	if (!UnregisterClass("OpenGL", hInstance))			// Are We Able To Unregister Class
-	{
-		MessageBox(NULL, "Could Not Unregister Class.", "SHUTDOWN ERROR", MB_OK | MB_ICONINFORMATION);
-		hInstance = NULL;									// Set hInstance To NULL
-	}
-}
-
-/*	This Code Creates Our OpenGL Window.  Parameters Are:					*
-*	title			- Title To Appear At The Top Of The Window				*
-*	width			- Width Of The GL Window Or Fullscreen Mode				*
-*	height			- Height Of The GL Window Or Fullscreen Mode			*
-*	bits			- Number Of Bits To Use For Color (8/16/24/32)			*
-*	fullscreenflag	- Use Fullscreen Mode (TRUE) Or Windowed Mode (FALSE)	*/
-
-BOOL CreateGLWindow(char* title, int width, int height, int bits, bool fullscreenflag)
-{
-	GLuint		PixelFormat;			// Holds The Results After Searching For A Match
-	WNDCLASS	wc;						// Windows Class Structure
-	DWORD		dwExStyle;				// Window Extended Style
-	DWORD		dwStyle;				// Window Style
-	RECT		WindowRect;				// Grabs Rectangle Upper Left / Lower Right Values
-	WindowRect.left = (long)0;			// Set Left Value To 0
-	WindowRect.right = (long)width;		// Set Right Value To Requested Width
-	WindowRect.top = (long)0;				// Set Top Value To 0
-	WindowRect.bottom = (long)height;		// Set Bottom Value To Requested Height
-
-	fullscreen = fullscreenflag;			// Set The Global Fullscreen Flag
-
-	hInstance = GetModuleHandle(NULL);				// Grab An Instance For Our Window
-	wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;	// Redraw On Size, And Own DC For Window.
-	wc.lpfnWndProc = (WNDPROC)WndProc;					// WndProc Handles Messages
-	wc.cbClsExtra = 0;									// No Extra Window Data
-	wc.cbWndExtra = 0;									// No Extra Window Data
-	wc.hInstance = hInstance;							// Set The Instance
-	wc.hIcon = LoadIcon(NULL, IDI_WINLOGO);			// Load The Default Icon
-	wc.hCursor = LoadCursor(NULL, IDC_ARROW);			// Load The Arrow Pointer
-	wc.hbrBackground = NULL;									// No Background Required For GL
-	wc.lpszMenuName = NULL;									// We Don't Want A Menu
-	wc.lpszClassName = "OpenGL";								// Set The Class Name
-
-	if (!RegisterClass(&wc))									// Attempt To Register The Window Class
-	{
-		MessageBox(NULL, "Failed To Register The Window Class.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;											// Return FALSE
-	}
-
-	if (fullscreen)												// Attempt Fullscreen Mode?
-	{
-		DEVMODE dmScreenSettings;								// Device Mode
-		memset(&dmScreenSettings, 0, sizeof(dmScreenSettings));	// Makes Sure Memory's Cleared
-		dmScreenSettings.dmSize = sizeof(dmScreenSettings);		// Size Of The Devmode Structure
-		dmScreenSettings.dmPelsWidth = width;				// Selected Screen Width
-		dmScreenSettings.dmPelsHeight = height;				// Selected Screen Height
-		dmScreenSettings.dmBitsPerPel = bits;					// Selected Bits Per Pixel
-		dmScreenSettings.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-
-		// Try To Set Selected Mode And Get Results.  NOTE: CDS_FULLSCREEN Gets Rid Of Start Bar.
-		if (ChangeDisplaySettings(&dmScreenSettings, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL)
-		{
-			// If The Mode Fails, Offer Two Options.  Quit Or Use Windowed Mode.
-			if (MessageBox(NULL, "The Requested Fullscreen Mode Is Not Supported By\nYour Video Card. Use Windowed Mode Instead?", "NeHe GL", MB_YESNO | MB_ICONEXCLAMATION) == IDYES)
-			{
-				fullscreen = FALSE;		// Windowed Mode Selected.  Fullscreen = FALSE
-			}
-			else
-			{
-				// Pop Up A Message Box Letting User Know The Program Is Closing.
-				MessageBox(NULL, "Program Will Now Close.", "ERROR", MB_OK | MB_ICONSTOP);
-				return FALSE;									// Return FALSE
-			}
-		}
-	}
-
-	if (fullscreen)												// Are We Still In Fullscreen Mode?
-	{
-		dwExStyle = WS_EX_APPWINDOW;								// Window Extended Style
-		dwStyle = WS_POPUP;										// Windows Style
-		ShowCursor(FALSE);										// Hide Mouse Pointer
 	}
 	else
 	{
-		dwExStyle = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;			// Window Extended Style
-		dwStyle = WS_OVERLAPPEDWINDOW;							// Windows Style
-	}
-
-	AdjustWindowRectEx(&WindowRect, dwStyle, FALSE, dwExStyle);		// Adjust Window To True Requested Size
-
-	// Create The Window
-	if (!(hWnd = CreateWindowEx(dwExStyle,							// Extended Style For The Window
-		"OpenGL",							// Class Name
-		title,								// Window Title
-		dwStyle |							// Defined Window Style
-		WS_CLIPSIBLINGS |					// Required Window Style
-		WS_CLIPCHILDREN,					// Required Window Style
-		0, 0,								// Window Position
-		WindowRect.right - WindowRect.left,	// Calculate Window Width
-		WindowRect.bottom - WindowRect.top,	// Calculate Window Height
-		NULL,								// No Parent Window
-		NULL,								// No Menu
-		hInstance,							// Instance
-		NULL)))								// Dont Pass Anything To WM_CREATE
-	{
-		KillGLWindow();								// Reset The Display
-		MessageBox(NULL, "Window Creation Error.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;								// Return FALSE
-	}
-
-	static	PIXELFORMATDESCRIPTOR pfd =				// pfd Tells Windows How We Want Things To Be
-	{
-		sizeof(PIXELFORMATDESCRIPTOR),				// Size Of This Pixel Format Descriptor
-		1,											// Version Number
-		PFD_DRAW_TO_WINDOW |						// Format Must Support Window
-		PFD_SUPPORT_OPENGL |						// Format Must Support OpenGL
-		PFD_DOUBLEBUFFER,							// Must Support Double Buffering
-		PFD_TYPE_RGBA,								// Request An RGBA Format
-		bits,										// Select Our Color Depth
-		0, 0, 0, 0, 0, 0,							// Color Bits Ignored
-		0,											// No Alpha Buffer
-		0,											// Shift Bit Ignored
-		0,											// No Accumulation Buffer
-		0, 0, 0, 0,									// Accumulation Bits Ignored
-		16,											// 16Bit Z-Buffer (Depth Buffer)  
-		0,											// No Stencil Buffer
-		0,											// No Auxiliary Buffer
-		PFD_MAIN_PLANE,								// Main Drawing Layer
-		0,											// Reserved
-		0, 0, 0										// Layer Masks Ignored
-	};
-
-	if (!(hDC = GetDC(hWnd)))							// Did We Get A Device Context?
-	{
-		KillGLWindow();								// Reset The Display
-		MessageBox(NULL, "Can't Create A GL Device Context.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;								// Return FALSE
-	}
-
-	if (!(PixelFormat = ChoosePixelFormat(hDC, &pfd)))	// Did Windows Find A Matching Pixel Format?
-	{
-		KillGLWindow();								// Reset The Display
-		MessageBox(NULL, "Can't Find A Suitable PixelFormat.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;								// Return FALSE
-	}
-
-	if (!SetPixelFormat(hDC, PixelFormat, &pfd))		// Are We Able To Set The Pixel Format?
-	{
-		KillGLWindow();								// Reset The Display
-		MessageBox(NULL, "Can't Set The PixelFormat.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;								// Return FALSE
-	}
-
-	if (!(hRC = wglCreateContext(hDC)))				// Are We Able To Get A Rendering Context?
-	{
-		KillGLWindow();								// Reset The Display
-		MessageBox(NULL, "Can't Create A GL Rendering Context.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;								// Return FALSE
-	}
-
-	if (!wglMakeCurrent(hDC, hRC))					// Try To Activate The Rendering Context
-	{
-		KillGLWindow();								// Reset The Display
-		MessageBox(NULL, "Can't Activate The GL Rendering Context.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;								// Return FALSE
-	}
-
-	ShowWindow(hWnd, SW_SHOW);						// Show The Window
-	SetForegroundWindow(hWnd);						// Slightly Higher Priority
-	SetFocus(hWnd);									// Sets Keyboard Focus To The Window
-	ReSizeGLScene(width, height);					// Set Up Our Perspective GL Screen
-
-	if (!InitGL())									// Initialize Our Newly Created GL Window
-	{
-		KillGLWindow();								// Reset The Display
-		MessageBox(NULL, "Initialization Failed.", "ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return FALSE;								// Return FALSE
-	}
-
-	return TRUE;									// Success
-}
-
-LRESULT CALLBACK WndProc(HWND	hWnd,			// Handle For This Window
-	UINT	uMsg,			// Message For This Window
-	WPARAM	wParam,			// Additional Message Information
-	LPARAM	lParam)			// Additional Message Information
-{
-	switch (uMsg)									// Check For Windows Messages
-	{
-	case WM_ACTIVATE:							// Watch For Window Activate Message
-	{
-		if (!HIWORD(wParam))					// Check Minimization State
+		/*
+		*	Which button was released?
+		*/
+		switch (button)
 		{
-			active = TRUE;						// Program Is Active
+		case GLUT_LEFT_BUTTON:
+			TheMouse.lmb = 0;
+			ButtonRelease(x, y);
+			break;
+		case GLUT_MIDDLE_BUTTON:
+			TheMouse.mmb = 0;
+			break;
+		case GLUT_RIGHT_BUTTON:
+			TheMouse.rmb = 0;
+			break;
 		}
-		else
-		{
-			active = FALSE;						// Program Is No Longer Active
-		}
-
-		return 0;								// Return To The Message Loop
 	}
-
-	case WM_SYSCOMMAND:							// Intercept System Commands
-	{
-		switch (wParam)							// Check System Calls
-		{
-		case SC_SCREENSAVE:					// Screensaver Trying To Start?
-		case SC_MONITORPOWER:				// Monitor Trying To Enter Powersave?
-			return 0;							// Prevent From Happening
-		}
-		break;									// Exit
-	}
-
-	case WM_CLOSE:								// Did We Receive A Close Message?
-	{
-		PostQuitMessage(0);						// Send A Quit Message
-		return 0;								// Jump Back
-	}
-
-	case WM_KEYDOWN:							// Is A Key Being Held Down?
-	{
-		keys[wParam] = TRUE;					// If So, Mark It As TRUE
-		return 0;								// Jump Back
-	}
-
-	case WM_KEYUP:								// Has A Key Been Released?
-	{
-		keys[wParam] = FALSE;					// If So, Mark It As FALSE
-		return 0;								// Jump Back
-	}
-
-	case WM_SIZE:								// Resize The OpenGL Window
-	{
-		ReSizeGLScene(LOWORD(lParam), HIWORD(lParam));  // LoWord=Width, HiWord=Height
-		return 0;								// Jump Back
-	}
-	}
-
-	// Pass All Unhandled Messages To DefWindowProc
-	return DefWindowProc(hWnd, uMsg, wParam, lParam);
-}
-
-int WINAPI WinMain(HINSTANCE	hInstance,			// Instance
-	HINSTANCE	hPrevInstance,		// Previous Instance
-	LPSTR		lpCmdLine,			// Command Line Parameters
-	int			nCmdShow)			// Window Show State
-{
-	MSG		msg;									// Windows Message Structure
-	BOOL	done = FALSE;								// Bool Variable To Exit Loop
 
 	/*
-	// Ask The User Which Screen Mode They Prefer
-	if (MessageBox(NULL, "Would You Like To Run In Fullscreen Mode?", "Start FullScreen?", MB_YESNO | MB_ICONQUESTION) == IDNO)
-	{
-	fullscreen = FALSE;							// Windowed Mode
-	}
+	*	Force a redraw of the screen. If we later want interactions with the mouse
+	*	and the 3D scene, we will need to redraw the changes.
 	*/
-	fullscreen = FALSE;
+	glutPostRedisplay();
+}
 
-	// Create Our OpenGL Window
-	if (!CreateGLWindow("LED Cube Simulation", 1280, 720, 16, fullscreen))
+/*----------------------------------------------------------------------------------------
+*	\brief	This function is called whenever the mouse cursor is moved AND A BUTTON IS HELD.
+*	\param	x	-	the new x-coord of the mouse cursor.
+*	\param	y	-	the new y-coord of the mouse cursor.
+*/
+void MouseMotion(int x, int y)
+{
+	/*
+	*	Calculate how much the mouse actually moved
+	*/
+	int dx = x - TheMouse.x;
+	int dy = y - TheMouse.y;
+
+	/*
+	*	update the mouse position
+	*/
+	TheMouse.x = x;
+	TheMouse.y = y;
+
+
+	/*
+	*	Check MyButton to see if we should highlight it cos the mouse is over it
+	*/
+	ButtonPassive(x, y);
+
+	/*
+	*	Force a redraw of the screen
+	*/
+	glutPostRedisplay();
+}
+
+/*----------------------------------------------------------------------------------------
+*	\brief	This function is called whenever the mouse cursor is moved AND NO BUTTONS ARE HELD.
+*	\param	x	-	the new x-coord of the mouse cursor.
+*	\param	y	-	the new y-coord of the mouse cursor.
+*/
+void MousePassiveMotion(int x, int y)
+{
+	/*
+	*	Calculate how much the mouse actually moved
+	*/
+	int dx = x - TheMouse.x;
+	int dy = y - TheMouse.y;
+
+	/*
+	*	update the mouse position
+	*/
+	TheMouse.x = x;
+	TheMouse.y = y;
+
+	/*
+	*	Check MyButton to see if we should highlight it cos the mouse is over it
+	*/
+	ButtonPassive(x, y);
+
+}
+
+GLvoid DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
+{
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	// Clear The Screen And The Depth Buffer
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(45, (winh == 0) ? (1) : ((float)winw / winh), 1, 100);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+	GLfloat xtrans = -xpos;
+	GLfloat ztrans = -zpos;
+	GLfloat ytrans = 4.0f;
+	GLfloat sceneroty = 360.0f - yrot;
+
+	glTranslatef(0.0f, 0.0f, -25.0f);
+	glTranslatef(0.0f, 0.0f, ztrans);
+
+	glPushMatrix();
+	glRotatef(sceneroty, 0, 1.0f, 0);
+	glRotatef(lookupdown, 1.0f, 0, 0);
+	drawCube();
+	glPopMatrix();
+
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_LIGHTING);
+
+	/*
+	*	Set the orthographic viewing transformation
+	*/
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0, winw, winh, 0, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	/*
+	*	Draw the 2D overlay
+	*/
+	ButtonDraw();
+
+	/*
+	*	Bring the back buffer to the front and vice-versa.
+	*/
+	glutSwapBuffers();
+
+	if (getCurrentTime() >= swapPatternTime)
 	{
-		return 0;									// Quit If Window Was Not Created
+		setPattern();
 	}
+}
 
-	while (!done)									// Loop That Runs While done=FALSE
+/*----------------------------------------------------------------------------------------
+*	This function is called when the window is resized. All this does is simply
+*	store the new width and height of the window which are then referenced by
+*	the draw function to set the correct viewing transforms
+*/
+GLvoid ReSizeGLScene(GLsizei Width, GLsizei Height)
+{
+	if (Height == 0)				// Prevent A Divide By Zero If The Window Is Too Small
+		Height = 1;
+
+	glViewport(0, 0, Width, Height);		// Reset The Current Viewport And Perspective Transformation
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	gluPerspective(45.0f, (GLfloat)Width / (GLfloat)Height, 0.1f, 100.0f);
+	glMatrixMode(GL_MODELVIEW);
+}
+
+void usleep(__int64 usec)
+{
+	HANDLE timer;
+	LARGE_INTEGER ft;
+
+	ft.QuadPart = -(10 * usec); // Convert to 100 nanosecond interval, negative value indicates relative time
+
+	timer = CreateWaitableTimer(NULL, TRUE, NULL);
+	SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
+	WaitForSingleObject(timer, INFINITE);
+	CloseHandle(timer);
+}
+
+/* The function called whenever a normal key is pressed. */
+void keyPressed(unsigned char key, int x, int y)
+{
+	/* avoid thrashing this procedure */
+	usleep(50);
+
+	switch (key)
 	{
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))	// Is There A Message Waiting?
-		{
-			if (msg.message == WM_QUIT)				// Have We Received A Quit Message?
-			{
-				done = TRUE;							// If So done=TRUE
-			}
-			else									// If Not, Deal With Window Messages
-			{
-				TranslateMessage(&msg);				// Translate The Message
-				DispatchMessage(&msg);				// Dispatch The Message
-			}
-		}
-		else										// If There Are No Messages
-		{
-			// Draw The Scene.  Watch For ESC Key And Quit Messages From DrawGLScene()
-			if ((active && !DrawGLScene()) || keys[VK_ESCAPE])	// Active?  Was There A Quit Received?
-			{
-				done = TRUE;							// ESC or DrawGLScene Signalled A Quit
-			}
-			else									// Not Time To Quit, Update Screen
-			{
-				//Logic Update Section
-				SwapBuffers(hDC);					// Swap Buffers (Double Buffering)
-
-				if (getCurrentTime() >= swapPatternTime)
-				{
-					setPattern();
-				}
-
-				if (keys[VK_RIGHT])
-				{
-					if (yrot <= -359.0f)
-					{
-						yrot = 0.0f;
-					}
-					yrot -= 1.0f;
-				}
-				if (keys[VK_LEFT])
-				{
-					if (yrot >= 359.0f)
-					{
-						yrot = 0.0f;
-					}
-					yrot += 1.0f;
-				}
-				if (keys[VK_UP])
-				{
-					if (lookupdown <= -359.0f)
-					{
-						lookupdown = 0.0f;
-					}
-					lookupdown -= 1.0f;
-				}
-				if (keys[VK_DOWN])
-				{
-					if (lookupdown >= 359.0f)
-					{
-						lookupdown = 0.0f;
-					}
-					lookupdown += 1.0f;
-				}
-				if (keys['S'])
-				{
-					diffrot = (yrot + yrot);
-					xpos += (float)sin(yrot*piover180) * 0.075f;
-					zpos += (float)cos(yrot*piover180) * 0.075f;
-
-				}
-				if (keys['W'])
-				{
-					diffrot = (yrot + yrot);
-					xpos -= (float)sin(yrot*piover180) * 0.075f;
-					zpos -= (float)cos(yrot*piover180) * 0.075f;
-				}
-				if (keys['A'])
-				{
-					diffrot = (yrot + 180.0f);
-					xpos += (float)sin((yrot - 90.0f)*piover180) * 0.075f;
-					zpos += (float)cos((yrot - 90.0f)*piover180) * 0.075f;
-				}
-				if (keys['D'])
-				{
-					diffrot = (-yrot - 180.0f);
-					xpos -= (float)sin((yrot - 90.0f)*piover180) * 0.075f;
-					zpos -= (float)cos((yrot - 90.0f)*piover180) * 0.075f;
-				}
-				/*
-				if (keys[VK_SPACE])
-				{
-				currT = GetTickCount();
-				if ((currT - lastShot) >= 2000)
-				{
-				if (screen == 1)
-				{
-				//P = shotUpdate(P);
-				}
-				}
-				}
-				*/
-				if (keys[VK_RETURN])
-				{
-					if (screen == 0)
-					{
-						screen = 1;
-					}
-				}
-				if (keys[VK_F1])						// Is F1 Being Pressed?
-				{
-					keys[VK_F1] = FALSE;					// If So Make Key FALSE
-					KillGLWindow();						// Kill Our Current Window
-					fullscreen = !fullscreen;				// Toggle Fullscreen / Windowed Mode
-					// Recreate Our OpenGL Window
-					if (!CreateGLWindow("Attack of the Evil Hydrogen and Oxygen Atoms!", 1280, 720, 16, fullscreen))
-					{
-						return 0;						// Quit If Window Was Not Created
-					}
-				}
-			}
-		}
+	case ESCAPE: // kill everything.
+		glutDestroyWindow(window);
+		break;
+	case 's':
+	case 'S':
+		diffrot = (yrot + yrot);
+		xpos += (float)sin(yrot*piover180) * 0.075f;
+		zpos += (float)cos(yrot*piover180) * 0.075f;
+		break;
+	case 'w':
+	case 'W':
+		diffrot = (yrot + yrot);
+		xpos -= (float)sin(yrot*piover180) * 0.075f;
+		zpos -= (float)cos(yrot*piover180) * 0.075f;
+		break;
+	default:
+		printf("Key %d pressed. No action there yet.\n", key);
+		break;
 	}
+}
 
-	// Shutdown
-	KillGLWindow();									// Kill The Window
-	return (msg.wParam);							// Exit The Program
+/* The function called whenever a normal key is pressed. */
+void specialKeyPressed(int key, int x, int y)
+{
+	/* avoid thrashing this procedure */
+	usleep(50);
+
+	switch (key)
+	{
+	case GLUT_KEY_UP:
+		if (lookupdown <= -359.0f)
+		{
+			lookupdown = 0.0f;
+		}
+		lookupdown -= 1.0f;
+		break;
+
+	case GLUT_KEY_DOWN:
+		if (lookupdown >= 359.0f)
+		{
+			lookupdown = 0.0f;
+		}
+		lookupdown += 1.0f;
+		break;
+
+	case GLUT_KEY_LEFT:
+		if (yrot >= 359.0f)
+		{
+			yrot = 0.0f;
+		}
+		yrot += 1.0f;
+		break;
+
+	case GLUT_KEY_RIGHT:
+		if (yrot <= -359.0f)
+		{
+			yrot = 0.0f;
+		}
+		yrot -= 1.0f;
+		break;
+
+	default:
+		printf("Special key %d pressed. No action there yet.\n", key);
+		break;
+	}
+}
+
+int main(int argc, char **argv)
+{
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_ALPHA);
+	glutInitWindowSize(winw, winh);
+	glutInitWindowPosition(200, 100);
+	window = glutCreateWindow("LED Cube Simulation");
+
+	glutDisplayFunc(&DrawGLScene);
+	glutIdleFunc(&DrawGLScene);
+	glutReshapeFunc(&ReSizeGLScene);
+	glutKeyboardFunc(&keyPressed);
+	glutSpecialFunc(&specialKeyPressed);
+	glutMouseFunc(&MouseButton);
+	glutMotionFunc(&MouseMotion);
+	glutPassiveMotionFunc(&MousePassiveMotion);
+
+	InitGL();
+	
+	glutMainLoop();
 }
