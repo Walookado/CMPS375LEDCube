@@ -366,6 +366,22 @@ int CreateButton(std::string label, ButtonCallback cb, int x, int y, int w, int 
 	return p->id = ++GlobalRef;
 }
 
+void MoveButton(int id, int x, int y, int w, int h)
+{
+	Button* p = pButtonList;
+	while (p)
+	{
+		if (id == p->id)
+		{
+			p->x = x;
+			p->y = y;
+			p->w = w;
+			p->h = h;
+		}
+		p = p->next;
+	}
+}
+
 int DeleteButtonByName(std::string label)
 {
 	Button* previous = NULL, *curr = pButtonList;
@@ -888,24 +904,53 @@ void InitButtons()
 		if (i % 4 == 0 && i != 0)
 		{
 			xOffset = winw * 0.875;
-			yOffset += 40;
+			yOffset += winw * 0.03125;
 		}
-		CreateButton(std::to_string(i), TheButtonCallback, xOffset, yOffset, 30, 30);
-		xOffset += 40;
+		CreateButton(std::to_string(i), TheButtonCallback, xOffset, yOffset, winw * 0.0234375, winh * 0.04167);
+		xOffset += winw * 0.03125;
 	}
 
 	xOffset = winw * 0.875;
 	yOffset = winh * 0.94;
 
-	CreateButton("UP", LayerUpCallback, xOffset - 50, yOffset - 90, 40, 25);
-	CreateButton(std::to_string(layer), BlankCallback, xOffset - 50, yOffset - 60, 40, 25);
-	CreateButton("DOWN", LayerDownCallback, xOffset - 50, yOffset - 30, 40, 25);
-	CreateButton("Save", SaveCallback, (winw * 0.5) - 80, winh * 0.95, 50, 25);
-	CreateButton("Reset", ResetCallback, (winw * 0.5) + 30, winh * 0.95, 50, 25);
-	CreateButton("Run/Stop", RunCallback, (winw * 0.5) - 25, winh * 0.95, 50, 25);
-	CreateButton("+", TimeUpCallback, xOffset + 15, (winh * 0.77) - 35, 35, 25);
-	CreateButton(std::to_string(theCube.patternTime), BlankCallback, xOffset + 55, (winh * 0.77) - 35, 40, 25);
-	CreateButton("-", TimeDownCallback, xOffset + 100, (winh * 0.77) - 35, 35, 25);
+	CreateButton("UP", LayerUpCallback, xOffset - 50, yOffset - 90, winw * 0.03125, winh * 0.034723);
+	CreateButton(std::to_string(layer), BlankCallback, xOffset - 50, yOffset - 60, winw * 0.03125, winh * 0.034723);
+	CreateButton("DOWN", LayerDownCallback, xOffset - 50, yOffset - 30, winw * 0.03125, winh * 0.034723);
+	CreateButton("Save", SaveCallback, (winw * 0.5) - 80, winh * 0.95, winw * 0.0390625, winh * 0.034723);
+	CreateButton("Reset", ResetCallback, (winw * 0.5) + 30, winh * 0.95, winw * 0.0390625, winh * 0.034723);
+	CreateButton("Run/Stop", RunCallback, (winw * 0.5) - 25, winh * 0.95, winw * 0.0390625, winh * 0.034723);
+	CreateButton("+", TimeUpCallback, xOffset + (winw * 0.01171875), (winh * 0.77) - 35, winw * 0.02734375, winh * 0.034723);
+	CreateButton(std::to_string(theCube.patternTime), BlankCallback, xOffset + (winw * 0.04296875), (winh * 0.77) - 35, winw * 0.03125, winh * 0.034723);
+	CreateButton("-", TimeDownCallback, xOffset + (winw * 0.078125), (winh * 0.77) - 35, winw * 0.02734375, winh * 0.034723);
+}
+
+void ReInitButtons()
+{
+	xOffset = winw * 0.875;
+	yOffset = winh * 0.77;
+	for (int i = 0; i < 16; ++i)
+	{
+		if (i % 4 == 0 && i != 0)
+		{
+			xOffset = winw * 0.875;
+			yOffset += winw * 0.03125;
+		}
+		MoveButton(i + 1, xOffset, yOffset, winw * 0.0234375, winh * 0.04167);
+		xOffset += winw * 0.03125;
+	}
+
+	xOffset = winw * 0.875;
+	yOffset = winh * 0.94;
+
+	MoveButton(17, xOffset - (winw * 0.0390625), yOffset - (winh * 0.125), winw * 0.03125, winh * 0.034723);
+	MoveButton(18, xOffset - (winw * 0.0390625), yOffset - (winh * 0.0833), winw * 0.03125, winh * 0.034723);
+	MoveButton(19, xOffset - (winw * 0.0390625), yOffset - (winh * 0.04166), winw * 0.03125, winh * 0.034723);
+	MoveButton(20, (winw * 0.5) - (winw * 0.0625), winh * 0.95, winw * 0.0390625, winh * 0.034723);
+	MoveButton(21, (winw * 0.5) + (winw * 0.0234375), winh * 0.95, winw * 0.0390625, winh * 0.034723);
+	MoveButton(22, (winw * 0.5) - (winw * 0.01953125), winh * 0.95, winw * 0.0390625, winh * 0.034723);
+	MoveButton(23, xOffset + (winw * 0.01171875), (winh * 0.77) - (winh * 0.04861), winw * 0.02734375, winh * 0.034723);
+	MoveButton(24, xOffset + (winw * 0.04296875), (winh * 0.77) - (winh * 0.04861), winw * 0.03125, winh * 0.034723);
+	MoveButton(25, xOffset + (winw * 0.078125), (winh * 0.77) - (winh * 0.04861), winw * 0.02734375, winh * 0.034723);
 }
 
 int InitGL(GLvoid)										// All Setup For OpenGL Goes Here
@@ -1069,7 +1114,7 @@ GLvoid DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	// Clear The Screen And The Depth Buffer
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(45, (winh == 0) ? (1) : ((float)winw / winh), 1, 100);
+	gluPerspective(45.0f, (winh == 0) ? (1) : ((float)winw / winh), 1.0f, 100.0f);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
@@ -1123,14 +1168,19 @@ GLvoid ReSizeGLScene(GLsizei Width, GLsizei Height)
 {
 	if (Height == 0)				// Prevent A Divide By Zero If The Window Is Too Small
 		Height = 1;
+	winw = Width;
+	winh = Height;
 
 	glViewport(0, 0, Width, Height);		// Reset The Current Viewport And Perspective Transformation
 
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 
-	gluPerspective(45.0f, (GLfloat)Width / (GLfloat)Height, 0.1f, 100.0f);
+	gluPerspective(45.0f, (GLfloat)Width / (GLfloat)Height, 1.0f, 100.0f);
 	glMatrixMode(GL_MODELVIEW);
+
+	// Move Buttons Back
+	ReInitButtons();
 }
 
 void usleep(__int64 usec)
