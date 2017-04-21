@@ -26,6 +26,10 @@
 #include <gl\glu.h>			// Header File For The GLu32 Library
 #include "SOIL.h"
 #include <assert.h>
+#include <mmsystem.h>
+#include <mciapi.h>
+
+#pragma comment(lib, "Winmm.lib")
 
 const float piover180 = 0.0174532925f;
 const float pi = 3.1415926536f;
@@ -43,6 +47,7 @@ GLfloat xpos = 0.0f;									//Camera x position
 GLfloat zpos = 0.0f;									//Camera z position
 
 clock_t swapPatternTime;
+clock_t startTime;
 
 GLuint	listLED;		//Draw Lists
 GLuint	screen = 1;
@@ -50,6 +55,7 @@ GLuint	numLED = 64;
 
 GLboolean running = true;
 GLboolean resetFlag = false;
+GLboolean goodToGo = false;
 
 int winw = 1280;
 int winh = 720;
@@ -58,8 +64,6 @@ int yOffset = winh * 0.77;
 int GlobalRef = 0;
 int layer = 0;
 int window;
-
-
 
 /*
 *	A structure to represent the mouse information
@@ -477,6 +481,8 @@ static void ResetCallback(int num)
 	}
 	running = false;
 	resetFlag = true;
+	mciSendString("play mp3 from 0", NULL, 0, NULL);
+	mciSendString("pause mp3", NULL, 0, NULL);
 	printf("Button id  %d\n", num);
 }
 
@@ -490,6 +496,15 @@ static void SaveCallback(int num)
 static void RunCallback(int num)
 {
 	running = !running;
+	if (!running)
+	{
+		mciSendString("pause mp3", NULL, 0, NULL);
+	}
+	else
+	{
+		mciSendString("resume mp3", NULL, 0, NULL);
+	}
+	//mciSendString("stop mp3", NULL, 0, NULL); // Stop the mp3 if you need to work on something else
 	printf("Button id  %d\n", num);
 }
 
@@ -608,7 +623,6 @@ void Font(void *font, std::string text, int x, int y)
 		glutBitmapCharacter(font, *it);
 	}
 }
-
 
 /*----------------------------------------------------------------------------------------
 *	\brief	This function is used to see if a mouse click or event is within a button
@@ -955,6 +969,7 @@ void ReInitButtons()
 
 int InitGL(GLvoid)										// All Setup For OpenGL Goes Here
 {
+	startTime = getCurrentTime();
 	glEnable(GL_TEXTURE_2D);							// Enable Texture Mapping
 	glShadeModel(GL_SMOOTH);							// Enable Smooth Shading
 	glClearColor(0.0f, 0.0f, 0.0f, 0.5f);				// Black Background
@@ -1109,6 +1124,36 @@ void MousePassiveMotion(int x, int y)
 
 }
 
+void usleep(__int64 usec)
+{
+	HANDLE timer;
+	LARGE_INTEGER ft;
+
+	ft.QuadPart = -(10 * usec); // Convert to 100 nanosecond interval, negative value indicates relative time
+
+	timer = CreateWaitableTimer(NULL, TRUE, NULL);
+	SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
+	WaitForSingleObject(timer, INFINITE);
+	CloseHandle(timer);
+}
+
+void playMp3()
+{
+		mciSendString("open \"imperialmarch.mp3\" type mpegvideo alias mp3", NULL, 0, NULL);
+		mciSendString("play mp3 repeat", NULL, 0, NULL);
+}
+
+GLboolean goTimeCheck()
+{
+	if (getCurrentTime() <= (startTime + 500)){}
+	else
+	{
+		goodToGo = true;
+		playMp3();
+	}
+	return goodToGo;
+}
+
 GLvoid DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	// Clear The Screen And The Depth Buffer
@@ -1126,10 +1171,18 @@ GLvoid DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
 	glTranslatef(0.0f, 0.0f, -25.0f);
 	glTranslatef(0.0f, 0.0f, ztrans);
 
+
 	glPushMatrix();
 	glRotatef(sceneroty, 0, 1.0f, 0);
 	glRotatef(lookupdown, 1.0f, 0, 0);
-	drawCube();
+	if (!goodToGo)
+	{
+		goTimeCheck();
+	}
+	else
+	{
+		drawCube();
+	}
 	glPopMatrix();
 
 	glDisable(GL_DEPTH_TEST);
@@ -1181,19 +1234,6 @@ GLvoid ReSizeGLScene(GLsizei Width, GLsizei Height)
 
 	// Move Buttons Back
 	ReInitButtons();
-}
-
-void usleep(__int64 usec)
-{
-	HANDLE timer;
-	LARGE_INTEGER ft;
-
-	ft.QuadPart = -(10 * usec); // Convert to 100 nanosecond interval, negative value indicates relative time
-
-	timer = CreateWaitableTimer(NULL, TRUE, NULL);
-	SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
-	WaitForSingleObject(timer, INFINITE);
-	CloseHandle(timer);
 }
 
 /* The function called whenever a normal key is pressed. */
