@@ -274,7 +274,7 @@ void initCube()
 
 }
 
-void convertPattern()
+std::string convertPattern()
 {
 	std::string pattern = "";
 	if (theCube.patternStorage[0] == "")
@@ -294,9 +294,10 @@ void convertPattern()
 	pattern.append(std::to_string(theCube.patternTime));
 	pattern.append(",");
 	theCube.patternStorage.push_back(pattern);
+	return pattern;
 }
 
-void writePatterns()
+void writePatterns(std::string pattern)
 {
 	std::ofstream outFile;
 	if (resetFlag)
@@ -304,10 +305,8 @@ void writePatterns()
 		outFile.open("pattern.txt", std::ofstream::out | std::ofstream::trunc);
 		if (outFile.is_open())
 		{
-			for (std::vector<std::string>::iterator it = theCube.patternStorage.begin(); it != theCube.patternStorage.end(); ++it)
-			{
-				outFile << *it << "\n";
-			}
+			outFile << pattern << "\n";
+
 			outFile.close();
 		}
 		else
@@ -321,10 +320,8 @@ void writePatterns()
 		outFile.open("pattern.txt", std::ofstream::out | std::ios_base::app);
 		if (outFile.is_open())
 		{
-			for (std::vector<std::string>::iterator it = theCube.patternStorage.begin(); it != theCube.patternStorage.end(); ++it)
-			{
-				outFile << *it << "\n";
-			}
+			outFile << pattern << "\n";
+
 			outFile.close();
 		}
 		else
@@ -488,8 +485,9 @@ static void ResetCallback(int num)
 
 static void SaveCallback(int num)
 {
-	convertPattern();
-	writePatterns();
+	std::string patternSave;
+	patternSave = convertPattern();
+	writePatterns(patternSave);
 	printf("Button id  %d\n", num);
 }
 
@@ -1139,8 +1137,8 @@ void usleep(__int64 usec)
 
 void playMp3()
 {
-		mciSendString("open \"imperialmarch.mp3\" type mpegvideo alias mp3", NULL, 0, NULL);
-		mciSendString("play mp3 repeat", NULL, 0, NULL);
+	mciSendString("open \"imperialmarch.mp3\" type mpegvideo alias mp3", NULL, 0, NULL);
+	mciSendString("play mp3 repeat", NULL, 0, NULL);
 }
 
 GLboolean goTimeCheck()
