@@ -573,20 +573,20 @@ static void LayerDownCallback(int num)
 static void TimeUpCallback(int num)
 {
 	printf("Button id  %d and Time is %d\n", num, theCube.patternTime);
-	theCube.patternTime += 2;
+	theCube.patternTime += 1;
 	printf("Time is now %d\n", theCube.patternTime);
 }
 
 static void TimeDownCallback(int num)
 {
 	printf("Button id  %d and time is %d\n", num, theCube.patternTime);
-	if (theCube.patternTime == 0 || theCube.patternTime < 2)
+	if (theCube.patternTime == 0)
 	{
 		return;
 	}
 	else
 	{
-		theCube.patternTime -= 2;
+		theCube.patternTime -= 1;
 	}
 	printf("Time is now %d\n", theCube.patternTime);
 }
