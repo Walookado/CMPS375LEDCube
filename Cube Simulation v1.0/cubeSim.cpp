@@ -53,7 +53,7 @@ GLuint	listLED;		//Draw Lists
 GLuint	screen = 1;
 GLuint	numLED = 64;
 
-GLboolean running = true;
+GLboolean running = false;
 GLboolean resetFlag = false;
 GLboolean goodToGo = false;
 
@@ -176,10 +176,9 @@ void setPattern()
 		currPattern = theCube.patternStorage[theCube.patternIndex];
 
 	}
-	std::istringstream iss(currPattern);
-	bool looping = true;
 	int layer = 0;
 	int column = 0;
+	std::istringstream iss(currPattern);
 	std::string temp;
 
 	for (int i = 0; i < 16; ++i)
@@ -345,6 +344,12 @@ GLint initLEDList(GLuint list, GLUquadric *quad)		//Initialize draw lists for th
 	return list;
 }
 
+void playMp3()
+{
+	mciSendString("open \"imperialmarch.mp3\" type mpegvideo alias mp3", NULL, 0, NULL);
+	mciSendString("play mp3 repeat", NULL, 0, NULL);
+}
+
 /*
 *
 */
@@ -493,6 +498,11 @@ static void SaveCallback(int num)
 
 static void RunCallback(int num)
 {
+	if (!goodToGo)
+	{
+		playMp3();
+		goodToGo = true;
+	}
 	running = !running;
 	if (!running)
 	{
@@ -1135,12 +1145,6 @@ void usleep(__int64 usec)
 	CloseHandle(timer);
 }
 
-void playMp3()
-{
-	mciSendString("open \"imperialmarch.mp3\" type mpegvideo alias mp3", NULL, 0, NULL);
-	mciSendString("play mp3 repeat", NULL, 0, NULL);
-}
-
 GLboolean goTimeCheck()
 {
 	if (getCurrentTime() <= (startTime + 500)){}
@@ -1173,14 +1177,7 @@ GLvoid DrawGLScene(GLvoid)									// Here's Where We Do All The Drawing
 	glPushMatrix();
 	glRotatef(sceneroty, 0, 1.0f, 0);
 	glRotatef(lookupdown, 1.0f, 0, 0);
-	if (!goodToGo)
-	{
-		goTimeCheck();
-	}
-	else
-	{
-		drawCube();
-	}
+	drawCube();
 	glPopMatrix();
 
 	glDisable(GL_DEPTH_TEST);
