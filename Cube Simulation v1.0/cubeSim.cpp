@@ -222,7 +222,7 @@ void setPattern()
 	//Reset pattern to first after reaching final pattern
 	if (theCube.patternIndex >= theCube.patternStorage.size())
 	{
-		theCube.patternIndex = 0;
+		theCube.patternIndex = theCube.patternStorage.size() - 1;
 	}
 }
 
